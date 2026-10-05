@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import List, Union
 
 
 class Card(ABC):
@@ -31,7 +32,10 @@ class MtgCard(Card):
     Concrete implementation of a Magic: The Gathering card.
     """
 
-    def __init__(self, name: str, collector_num: str, color: str, rarity: str, cost: str, text: str, card_type: str, effect: str = 'nofx'):
+    def __init__(self, name: str, collector_num: str, color: str, rarity: str, cost: str, text: str, card_type: str,
+                 keywords: Union[None, List[str]]=None):
+        if keywords is None:
+            keywords = []
         self.name = name
         self.collector_num = collector_num
         self.color = color.upper()  # e.g., 'W', 'U', 'B', 'R', 'G', 'COLORLESS'
@@ -39,7 +43,7 @@ class MtgCard(Card):
         self.cost = cost.upper()
         self.text = text
         self.card_type = card_type.lower()
-        self.effect = effect.lower()
+        self.keywords = keywords
         self.target_bin: int = 0
 
 
@@ -64,8 +68,10 @@ class MtgCard(Card):
     def get_cost(self) -> str:
         return self.cost
 
-    def get_effect(self) -> str:
-        return self.effect
+    def get_keywords(self) -> List[str]:
+        if self.keywords is None:
+            return []
+        return self.keywords
 
     def get_target_bin(self) -> int:
         return self.target_bin
