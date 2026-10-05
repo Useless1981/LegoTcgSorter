@@ -111,12 +111,7 @@ Da der standardmäßige LEGO-Fantom-Treiber nicht direkt mit Python kompatibel i
 
 ---
 
-## 🚦 Aktueller Meilenstein: Verbindungstest
-Zum Überprüfen der Verbindung zwischen PC und NXT befindet sich das Skript `connect.py` im Root-Verzeichnis. Es initialisiert den Brick über USB und testet die Funktionalität eines Motors an Port A.
-
-```bash
-python connect.py
-```
+## 🚦 Aktueller Meilenstein: MVC
 
 ## 🗺️ Roadmap / Nächste Schritte
 - [ ] Stabilen mechanischen Karteneinzug (Singulator/Reibrad) mit LEGO-Teilen konstruieren.
