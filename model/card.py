@@ -31,11 +31,17 @@ class MtgCard(Card):
     Concrete implementation of a Magic: The Gathering card.
     """
 
-    def __init__(self, name: str, collector_num: str, color: str, rarity: str):
+    def __init__(self, name: str, collector_num: str, color: str, rarity: str, cost: str, text: str, card_type: str, effect: str = 'nofx'):
         self.name = name
         self.collector_num = collector_num
         self.color = color.upper()  # e.g., 'W', 'U', 'B', 'R', 'G', 'COLORLESS'
         self.rarity = rarity.lower()  # e.g., 'common', 'uncommon', 'rare', 'mythic'
+        self.cost = cost.upper()
+        self.text = text
+        self.card_type = card_type.lower()
+        self.effect = effect.lower()
+        self.target_bin: int = 0
+
 
     def get_name(self) -> str:
         return self.name
@@ -43,20 +49,29 @@ class MtgCard(Card):
     def get_id(self) -> str:
         return self.collector_num
 
+    def get_color(self) -> str:
+        return self.color
+
+    def get_card_type(self) -> str:
+        return self.card_type
+
+    def get_rarity(self) -> str:
+        return self.rarity
+
+    def get_text(self) -> str:
+        return self.text
+
+    def get_cost(self) -> str:
+        return self.cost
+
+    def get_effect(self) -> str:
+        return self.effect
+
     def get_target_bin(self) -> int:
-        """
-        Example sorting logic for MtG: Sort by color.
-        Maps the 5 basic Magic colors to specific LEGO sorting bins.
-        """
-        color_mapping = {
-            'W': 1,  # White
-            'U': 2,  # Blue
-            'B': 3,  # Black
-            'R': 4,  # Red
-            'G': 5,  # Green
-        }
-        # Default to bin 0 for colorless, artifacts, or multicolor cards
-        return color_mapping.get(self.color, 0)
+        return self.target_bin
+
+    def set_target_bin(self, target_bin: int):
+        self.target_bin = target_bin
 
 
 class PokemonCard(Card):
@@ -69,6 +84,7 @@ class PokemonCard(Card):
         self.id_string = id_string  # e.g., 'G1-042' or database index
         self.card_type = card_type.upper()  # e.g., 'FIRE', 'WATER', 'GRASS', 'TRAINER'
         self.rarity = rarity.lower()  # e.g., 'common', 'holo rare', 'ultra rare'
+        self.target_bin: int = 0
 
     def get_name(self) -> str:
         return self.name
@@ -76,17 +92,14 @@ class PokemonCard(Card):
     def get_id(self) -> str:
         return self.id_string
 
+    def get_card_type(self) -> str:
+        return self.card_type
+
+    def get_rarity(self) -> str:
+        return self.rarity
+
     def get_target_bin(self) -> int:
-        """
-        Example sorting logic for Pokémon: Sort by card type (Energy/Element).
-        """
-        type_mapping = {
-            'GRASS': 1,
-            'FIRE': 2,
-            'WATER': 3,
-            'LIGHTNING': 4,
-            'PSYCHIC': 5,
-            'TRAINER': 6,
-        }
-        # Default to bin 0 for Special types, Colorless, or unrecognized energies
-        return type_mapping.get(self.card_type, 0)
+        return self.target_bin
+
+    def set_target_bin(self, target_bin: int):
+        self.target_bin = target_bin
