@@ -1,0 +1,25 @@
+# Byte-compiled / optimized / DLL files (Python-Laufzeitdateien)
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Virtual Environments (Deine lokale Python-Umgebung - EXTREM WICHTIG!)
+venv/
+ENV/
+env/
+.venv/
+
+# PyCharm/JetBrains Einstellungen (Verhindert Konflikte beim Teampartner)
+.idea/
+*.iws
+
+# Betriebssystem-Spezifische Dateien
+.DS_Store
+Thumbs.db
+
+# Zukünftige Konfigurationsdaten (Falls ihr APIs nutzt)
+.env
+local_settings.py
