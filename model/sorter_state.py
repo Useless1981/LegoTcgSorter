@@ -19,6 +19,27 @@ class SorterState:
         # ... reset counters ...
         logger.info("New sorting session started. All counters initialized.")
 
+        # DIESE METHODE FEHLTE:
+
+    def stop_session(self):
+        """Stops the active session."""
+        self.is_running = False
+        logger.info(f"Sorting session stopped. Total cards sorted: {self.total_processed}")
+
+    def get_session_report(self) -> dict:
+        """
+        Generates a summary data dictionary. Useful for view components/GUIs.
+        """
+        total = self.total_processed + self.failed_scans
+        efficiency = (self.total_processed / total) * 100 if total > 0 else 100.0
+
+        return {
+            "total_processed": self.total_processed,
+            "failed_scans": self.failed_scans,
+            "bin_distribution": self.bin_counts.copy(),
+            "efficiency_rate": efficiency
+        }
+
     def log_successful_sort(self, card: Card):
         self.total_processed += 1
         self.card_log.append(card)
