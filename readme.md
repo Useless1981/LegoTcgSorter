@@ -15,6 +15,78 @@ Das Projekt nutzt einen **Master-Slave-Ansatz**, um die hardwareseitigen Limitie
 
 ---
 
+## 📐 Software Architecture (MVC Pattern)
+To ensure scalability and clean separation of concerns, this project is strictly structured around the **Model-View-Controller (MVC)** design pattern.
+
+       ┌───────────────────────────────────────────────────┐
+       │                    CONTROLLER                     │
+       │                (SorterController)                 │
+       └─────────┬───────────────────────────────┬─────────┘
+                 │                               │
+                 │ Updates Model                 │ Triggers Actions
+                 │ & Reads State                 │ & Reads Sensors
+                 ▼                               ▼
+       ┌───────────────────┐           ┌───────────────────┐
+       │       MODEL       │           │       VIEW        │
+       │  (Card, State,    │           │ (LegoHardware,    │
+       │   CardMatcher)    │           │  CameraWrapper)   │
+       └───────────────────┘           └───────────────────┘
+
+### 1. Model (Data & Core Logic)
+The Model components handle data storage, configuration, and image processing. They remain entirely independent of the LEGO hardware or the UI layout.
+* **`Card`:** Data class representing a physical card (Name, ID, Rarity, Target Bin).
+* **`SorterState`:** Manages the runtime status (e.g., total cards sorted, bin capacities).
+* **`CardMatcher`:** Implements OpenCV image-processing, thresholding, and Perceptual Hashing (pHash) to identify cards against a database.
+
+### 2. View (Hardware & User Interfaces)
+In this robotics context, the "View" represents any component that provides sensory input or mechanical output.
+* **`LegoHardware`:** Encapsulates the `nxt-python` API. Translates logical system commands into precise motor degrees.
+* **`Camera`:** Wrapper around OpenCV's `VideoCapture` to grab high-resolution frames.
+
+### 3. Controller (Workflow & State Machine)
+The Controller connects the Model and View layers. It runs the primary application loop and coordinates the sorting steps.
+
+---
+
+## 📂 Project Structure
+
+```text
+LegoTcgSorter/
+│
+├── .gitignore
+├── README.md
+├── requirements.txt
+├── main.py                 # Application entry point (initializes M, V, C)
+│
+├── model/
+│   ├── __init__.py
+│   ├── card.py             # Card Data Class
+│   ├── sorter_state.py     # Session stats & tracking
+│   └── card_matcher.py     # Image-hashing & API lookup
+│
+├── view/
+│   ├── __init__.py
+│   ├── camera.py           # OpenCV capture wrapper
+│   └── lego_hardware.py    # NXT motor control wrapper
+│
+└── controller/
+    ├── __init__.py
+    └── sorter_controller.py # Main loop / State machine
+```
+
+---
+
+## 🔄 Main Sorting Loop Workflow
+
+Each sorting cycle inside the `SorterController` executes the following sequence:
+1. **Trigger Intake:** Controller calls `view.LegoHardware.feed_card()`.
+2. **Capture Image:** Controller requests a frame via `view.Camera.get_frame()`.
+3. **Analyze & Match:** Controller passes the frame to `model.CardMatcher.identify()`.
+4. **Determine Action:** The Matcher returns a `Card` object containing the `target_bin`.
+5. **Eject & Sort:** Controller executes `view.LegoHardware.sort_to_bin(target_bin)`.
+6. **Log Statistics:** Controller increments tracking values in `model.SorterState`.
+
+---
 ## 💻 Setup & Installation
 
 ### 1. Repository klonen & venv einrichten
