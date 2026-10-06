@@ -1,10 +1,13 @@
 import time
 import logging
 import random
+from typing import Optional
+
 from model.sorter_state import SorterState
-from model.card import MtgCard, PokemonCard
+from model.card import Card, MtgCard, PokemonCard
 from view.lego_hardware import LegoHardware
 from view.camera import Camera
+from model.card_matcher import CardMatcher
 
 # Grab the sub-logger for the controller layer
 logger = logging.getLogger("TcgSorter.Controller")
@@ -19,6 +22,7 @@ class SorterController:
     def __init__(self, brick):
         # Initialize the Model components
         self.state = SorterState()
+        self.matcher = CardMatcher()
 
         # Initialize the View components
         self.hardware = LegoHardware(brick)
@@ -41,6 +45,25 @@ class SorterController:
             lambda: PokemonCard("Professor's Research", "SSH-178", "TRAINER", "rare")
         ]
         return random.choice(tcg_pool)()
+
+    def _process_and_identify_card(self, frame) -> Optional[Card]:
+        """
+        Private helper method to encapsulate the image extraction and identification pipeline.
+        :param frame: The raw image frame from the camera view
+        :return: A concrete Card object if successful, or None if extraction/matching fails
+        """
+        logger.debug("Passing frame data to CardMatcher algorithm...")
+        match_status = self.matcher.identify(frame)
+
+        if match_status == "FAILED":
+            logger.warning("Card contours could not be extracted by OpenCV pipeline.")
+            return None
+
+        # If CV extraction worked, fall back to our safe mock generator for identification
+        # TODO: Replace with real database/pHash lookup in the next milestone
+        detected_card = self._generate_mock_card()
+        logger.info(f"Card successfully matched: '{detected_card.get_name()}' ({type(detected_card).__name__})")
+        return detected_card
 
     def start_sorting(self, max_cards: int = 5):
         """
@@ -77,9 +100,10 @@ class SorterController:
                     continue
 
                 # Step 3: Match image data against database (Simulated for now)
-                logger.debug("Passing frame data to CardMatcher algorithm...")
-                current_card = self._generate_mock_card()
-                logger.info(f"Card Identified: '{current_card.get_name()}' ({type(current_card).__name__})")
+                current_card = self._process_and_identify_card(frame)
+                if current_card is None:
+                    self.state.log_failed_scan()
+                    continue
 
                 # Step 4: Actuate sorting gates based on Model logic
                 target_bin = current_card.get_target_bin()

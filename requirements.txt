@@ -9,3 +9,5 @@ Pillow>=10.0.0
 
 # HTTP Requests (for future TCG API connections, e.g., Scryfall)
 requests>=2.31.0
+
+numpy
