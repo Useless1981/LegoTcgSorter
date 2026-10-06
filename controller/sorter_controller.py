@@ -49,21 +49,23 @@ class SorterController:
     def _process_and_identify_card(self, frame) -> Optional[Card]:
         """
         Private helper method to encapsulate the image extraction and identification pipeline.
-        :param frame: The raw image frame from the camera view
-        :return: A concrete Card object if successful, or None if extraction/matching fails
         """
-        logger.debug("Passing frame data to CardMatcher algorithm...")
-        match_status = self.matcher.identify(frame)
+        # Run the real pHash comparison pipeline
+        matched_name = self.matcher.identify_card_name(frame, threshold=15)
 
-        if match_status == "FAILED":
-            logger.warning("Card contours could not be extracted by OpenCV pipeline.")
+        if matched_name is None:
+            logger.warning("Card identification workflow failed (No matching hash found).")
             return None
 
-        # If CV extraction worked, fall back to our safe mock generator for identification
-        # TODO: Replace with real database/pHash lookup in the next milestone
-        detected_card = self._generate_mock_card()
-        logger.info(f"Card successfully matched: '{detected_card.get_name()}' ({type(detected_card).__name__})")
-        return detected_card
+        # Factory-Logic: Map the filename to your concrete TCG data models
+        # For a clean test, we look if the filename contains clues about the TCG type
+        if "pokemon" in matched_name.lower():
+            # Example mapping: file named 'pokemon_pikachu.png'
+            return PokemonCard(matched_name, "ID-UNK", "LIGHTNING", "common")
+        else:
+            # Fallback/Default to an MTG Object configuration
+            return MtgCard(matched_name, "000", "COLORLESS", "rare", cost="0", text="Parsed via pHash",
+                           card_type="Core")
 
     def start_sorting(self, max_cards: int = 5):
         """
