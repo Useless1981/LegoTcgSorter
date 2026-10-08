@@ -85,20 +85,6 @@ def extract_gzip_archive(archive_file_url: str):
         logger.error(f"❌ Extraction failed: {e}")
         return False
 
-def get_image(image_url:str)-> Image:
-    # Bild-Download für das Hashing (CDN-Server blockieren sehr selten)
-    try:
-        img_response = requests.get(image_url, headers=HEADERS)
-        if img_response.status_code == 200:
-            img = Image.open(BytesIO(img_response.content))
-            return img
-        else:
-            logger.error(f"Falscher HTTP status code: {img_response.status_code} beim ZUgriff auf {image_url}")
-        return None
-    except Exception as e:
-            logger.error(f"Fehler bei Image Download {image_url}: {e}")
-
-
 def parse_jsonl_and_fill_database():
     """
     Reads the uncompressed plain-text .jsonl file line by line,
@@ -231,65 +217,88 @@ def fetch_and_hash_pokemon_set(set_id: str) -> int:
     if data is None:
         return 0
     for card in data.get("data", []):
-        card_id = card.get("id")
-        card_name = card.get("name")
-        coll_num = card.get("number")
-        rarity = card.get("rarity", "Unknown")
-
-        mana_cost = "NONE"
+        cards_processed: int = 0
         try:
-            cmc = float(card.get("hp", 0))
-        except ValueError:
-            cmc = 0.0
-
-        subtypes = card.get("subtypes", [])
-        type_line = "/".join(subtypes) if subtypes else card.get("supertype", "")
-
-        rules = []
-        for ability in card.get("abilities", []):
-            rules.append(f"[{ability.get('type')}]: {ability.get('text')}")
-        for attack in card.get("attacks", []):
-            rules.append(f"{attack.get('name')} ({attack.get('damage', '')}): {attack.get('text', '')}")
-        oracle_text = " | ".join(rules) if rules else "No rules text."
-
-        types_list = card.get("types", [])
-        colors = "".join(types_list).upper() if types_list else "COLORLESS"
-        color_identity = colors
-
-        # Extract price parameters if available via the TCGPlayer data subnode
-        tcgplayer_prices = card.get("tcgplayer", {}).get("prices", {})
-        usd_val = None
-        if tcgplayer_prices:
-            first_market = list(tcgplayer_prices.values())[0]
-            usd_val = first_market.get("market") or first_market.get("mid")
-
-        usd = float(usd_val) if usd_val else None
-        eur = None  # The Pokemon API does not serve localized EUR data blocks directly
-
-        image_url = card.get("images", {}).get("large")
-        if not image_url:
-            continue
-
-        try:
-            img = get_image(image_url)
-            if img is None:
-                logger.error(f"Image missing from '{card_name}'")
-            p_hash = str(imagehash.phash(img))
-            insert_into_db(cursor, card_id, card_name, coll_num, p_hash, rarity,p_hash, mana_cost, cmc, type_line,oracle_text, colors, color_identity, usd, eur)
-            cards_processed += 1
-            logger.info(f"   ↳ [POKEMON] Hashed #{cards_processed}: {card_name} -> {p_hash}")
-            conn.commit()
-
-            time.sleep(0.12)
+            inserted = insert_pokemoncard_in_db(cursor, card)
+            if inserted:
+                time.sleep(0.12)
+                cards_processed += 1
+            if cards_processed % 10 == 0:
+                logger.info(
+                    f"   ↳ [JSONL Stream] {cards_processed} Karten in DB gesichert. Letzte: {card.get("name")}")
+                conn.commit()
         except Exception as e:
-            logger.error(f"Error processing Pokémon card '{card_name}': {e}")
+            logger.error(f"Error processing Pokémon card '{card.get("name")}': {e}")
 
     conn.close()
 
     return cards_processed
 
 def insert_pokemoncard_in_db(cursor, card: dict) -> bool:
-    pass
+    card_id = card.get("id")
+    card_name = card.get("name")
+    coll_num = card.get("number")
+    rarity = card.get("rarity", "Unknown")
+
+    mana_cost = "NONE"
+    try:
+        cmc = float(card.get("hp", 0))
+    except ValueError:
+        cmc = 0.0
+
+    subtypes = card.get("subtypes", [])
+    type_line = "/".join(subtypes) if subtypes else card.get("supertype", "")
+
+    rules = []
+    for ability in card.get("abilities", []):
+        rules.append(f"[{ability.get('type')}]: {ability.get('text')}")
+    for attack in card.get("attacks", []):
+        rules.append(f"{attack.get('name')} ({attack.get('damage', '')}): {attack.get('text', '')}")
+    oracle_text = " | ".join(rules) if rules else "No rules text."
+
+    types_list = card.get("types", [])
+    colors = "".join(types_list).upper() if types_list else "COLORLESS"
+    color_identity = colors
+
+    # Extract price parameters if available via the TCGPlayer data subnode
+    tcgplayer_prices = card.get("tcgplayer", {}).get("prices", {})
+    usd_val = None
+    if tcgplayer_prices:
+        first_market = list(tcgplayer_prices.values())[0]
+        usd_val = first_market.get("market") or first_market.get("mid")
+
+    usd = float(usd_val) if usd_val else None
+    eur = None  # The Pokemon API does not serve localized EUR data blocks directly
+
+    image_url = card.get("images", {}).get("large")
+    if not image_url:
+        return False
+    try:
+        img = get_image(image_url)
+        if img is None:
+            logger.error(f"Image missing from '{card_name}'")
+        p_hash = str(imagehash.phash(img))
+        insert_into_db(cursor, card_id, card_name, coll_num, p_hash, rarity, p_hash, mana_cost, cmc, type_line,
+                       oracle_text, colors, color_identity, usd, eur)
+        return True
+    except Exception as e:
+        logger.error(f"Fehler beim einfügen der Pokemon Karte {card_name} in die Datenbank: {e}")
+        return False
+
+def get_image(image_url:str)-> Image:
+    # Bild-Download für das Hashing (CDN-Server blockieren sehr selten)
+    try:
+        img_response = requests.get(image_url, headers=HEADERS)
+        if img_response.status_code == 200:
+            img = Image.open(BytesIO(img_response.content))
+            return img
+        else:
+            logger.error(f"Falscher HTTP status code: {img_response.status_code} beim ZUgriff auf {image_url}")
+        return None
+    except Exception as e:
+            logger.error(f"Fehler bei Image Download {image_url}: {e}")
+
+
 
 def insert_into_db(cursor, card_id: str, tcg: str, name: str, set_code: str, collector_num: int, phash: str, rarity: str, mana_cost: str, cmc: float, type_line: str, oracle_text: str, colors: str, color_identity: str, usd: float, eur: float):
     cursor.execute("""
