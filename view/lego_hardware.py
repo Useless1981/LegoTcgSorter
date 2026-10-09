@@ -1,5 +1,6 @@
 import time
 import nxt.locator
+from numpy.f2py.auxfuncs import throw_error
 from nxt.motor import Port
 
 
@@ -36,7 +37,7 @@ class LegoHardware:
             time.sleep(0.5)  # Let the mechanism settle down
             return True
         except Exception as e:
-            print(f"❌ LegoHardware Error (feeder): {e}")
+            print(f"❌ LegoHardware Error (stack feeder): {e}")
             return False
 
     def sort_to_bin(self, bin_number: int) -> bool:
@@ -50,11 +51,39 @@ class LegoHardware:
             # TODO: Implement your sorting logic here (e.g., branching or carousel rotation)
             # Example placeholder: turn sorter motor based on bin multiplier
             degrees = bin_number * self.bin_angle * self.sorter_gear_ratio
-            if degrees > 0:
-                self.sorter_motor.turn(50, degrees)
+            if not degrees > 0:
+                print(f"❌ LegoHardware Error (sorter): Can not turn {degrees} degrees.")
+                return False
+            self.sorter_motor.turn(50, degrees)
+            feed_to_bin: bool = self._feed_card_to_bin()
+            if not feed_to_bin:
+                print(f"❌ LegoHardware Error (sorter): Card not feed to bin.")
+                return False
+            reset: bool = self._reset_turntable(bin_number)
+            if not reset:
+                print(f"❌ LegoHardware Error (sorter): Table not resetted.")
+                return False
             return True
         except Exception as e:
             print(f"❌ LegoHardware Error (sorter): {e}")
+            return False
+
+    def _reset_turntable(self, bin_number: int) -> bool:
+        """
+        Resets the sorter table for new card.
+        :return: True if mechanical step completed successfully
+        """
+        print("🤖 LegoHardware: Actuating bin sorter motor to reset table...")
+        try:
+            bins_to_turn: int = 6 - bin_number
+            degrees = bins_to_turn * self.bin_angle * self.sorter_gear_ratio
+            if not degrees > 0:
+                print(f"❌ LegoHardware Error (sorter reset): Can not turn {degrees} degrees.")
+                return False
+            self.sorter_motor.turn(50, degrees)
+            return True
+        except Exception as e:
+            print(f"❌ LegoHardware Error (feeder reset): {e}")
             return False
 
     def _feed_card_to_bin(self):
@@ -65,9 +94,9 @@ class LegoHardware:
         print("🤖 LegoHardware: Actuating bin feeder motor move card to bin...")
         try:
             # Example: Turn motor A forward by 360 degrees to activate friction wheel
-            self.stack_feeder_motor.turn(60, 360)
+            self.bin_feeder_motor.turn(60, 360)
             time.sleep(0.5)  # Let the mechanism settle down
             return True
         except Exception as e:
-            print(f"❌ LegoHardware Error (feeder): {e}")
+            print(f"❌ LegoHardware Error (bin feeder): {e}")
             return False
