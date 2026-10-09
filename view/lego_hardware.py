@@ -16,8 +16,11 @@ class LegoHardware:
         """
         self.brick = brick
         # Initialize motors using the modern factory method
-        self.feeder_motor = self.brick.get_motor(Port.A)
+        self.stack_feeder_motor = self.brick.get_motor(Port.A)
         self.sorter_motor = self.brick.get_motor(Port.B)
+        self.bin_feeder_motor = self.brick.get_motor(Port.C)
+        self.sorter_gear_ratio: float = 60/20
+        self.bin_angle: int = 60
 
         print("🤖 LegoHardware View: Initialized motor mappings on Port A and B.")
 
@@ -26,10 +29,10 @@ class LegoHardware:
         Actuates the intake mechanism to pull exactly one card under the camera.
         :return: True if mechanical step completed successfully
         """
-        print("🤖 LegoHardware: Actuating feeder motor to draw a card...")
+        print("🤖 LegoHardware: Actuating stck feeder motor to draw a card...")
         try:
             # Example: Turn motor A forward by 360 degrees to activate friction wheel
-            self.feeder_motor.turn(60, 360)
+            self.stack_feeder_motor.turn(-60, 360)
             time.sleep(0.5)  # Let the mechanism settle down
             return True
         except Exception as e:
@@ -42,14 +45,29 @@ class LegoHardware:
         :param bin_number: Target bin identifier calculated by the model
         :return: True if sorting gate moved successfully
         """
-        print(f"🤖 LegoHardware: Adjusting mechanism for target bin {bin_number}...")
+        print(f"🤖 LegoHardware: Adjusting sorting table for target bin {bin_number}...")
         try:
             # TODO: Implement your sorting logic here (e.g., branching or carousel rotation)
             # Example placeholder: turn sorter motor based on bin multiplier
-            degrees = bin_number * 90
+            degrees = bin_number * self.bin_angle * self.sorter_gear_ratio
             if degrees > 0:
                 self.sorter_motor.turn(50, degrees)
             return True
         except Exception as e:
             print(f"❌ LegoHardware Error (sorter): {e}")
+            return False
+
+    def _feed_card_to_bin(self):
+        """
+        Feeds a card from the sorter table to the bin.
+        :return: True if mechanical step completed successfully
+        """
+        print("🤖 LegoHardware: Actuating bin feeder motor move card to bin...")
+        try:
+            # Example: Turn motor A forward by 360 degrees to activate friction wheel
+            self.stack_feeder_motor.turn(60, 360)
+            time.sleep(0.5)  # Let the mechanism settle down
+            return True
+        except Exception as e:
+            print(f"❌ LegoHardware Error (feeder): {e}")
             return False
