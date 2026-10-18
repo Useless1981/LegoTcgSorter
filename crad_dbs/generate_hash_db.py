@@ -19,10 +19,13 @@ logger = logging.getLogger("BulkHashDbGenerator")
 
 DB_NAME = "local_cards.db"
 COMPRESSED_FILE = "all-cards-20261006211848.jsonl.gz"
-JSONL_FILE = "scryfall_bulk.jsonl"
+MTG_DATA = "scryfall_bulk.jsonl"
+MTG_IDENTIFIER = "mtg"
+POKEMON_IDENTIFIER = "pokemon"
+POKEMON_DATA = "pokemon-tcg-data\\cards\\en"
 
 # Strict API-compliant header matching Scryfall developer rules
-HEADERS = {
+SCRYFALL_HEADERS = {
     "User-Agent": "LegoTcgSorterProject/1.0 (Contact: jan.student@uni.de)",
     "Accept": "application/json"
 }
@@ -69,32 +72,32 @@ def extract_gzip_archive(archive_file_url: str):
         logger.info("Please make sure the downloaded file is placed directly inside your PyCharm project folder.")
         return False
 
-    logger.info(f"📦 Extracting '{archive_file_url}' into '{JSONL_FILE}'...")
+    logger.info(f"📦 Extracting '{archive_file_url}' into '{MTG_DATA}'...")
     try:
         # Open the compressed gzipped file in binary read mode
         with gzip.open(archive_file_url, 'rb') as f_in:
             # Open the target text file in binary write mode
-            with open(JSONL_FILE, 'wb') as f_out:
+            with open(MTG_DATA, 'wb') as f_out:
                 # Shutil optimized block-copy handles the internal buffer streaming efficiently
                 shutil.copyfileobj(f_in, f_out)
 
-        logger.info(f"✅ Extraction successful! Plain text file ready at '{JSONL_FILE}'.")
+        logger.info(f"✅ Extraction successful! Plain text file ready at '{MTG_DATA}'.")
         return True
 
     except Exception as e:
         logger.error(f"❌ Extraction failed: {e}")
         return False
 
-def parse_jsonl_and_fill_database():
+def parse_mtg_jsonl_and_fill_database():
     """
     Reads the uncompressed plain-text .jsonl file line by line,
     extracts card data, computes pHashes, and populates the SQLite table.
     """
-    if not os.path.exists(JSONL_FILE):
-        logger.error(f"❌ Fehler: Die Datei '{JSONL_FILE}' wurde nicht gefunden!")
+    if not os.path.exists(MTG_DATA):
+        logger.error(f"❌ Fehler: Die Datei '{MTG_DATA}' wurde nicht gefunden!")
         return
 
-    logger.info(f"📖 Öffne lokale JSONL-Datei '{JSONL_FILE}' und initialisiere SQLite...")
+    logger.info(f"📖 Öffne lokale JSONL-Datei '{MTG_DATA}' und initialisiere SQLite...")
 
     # 1. Datenbank-Tabelle vorbereiten (falls noch nicht geschehen)
     conn = sqlite3.connect(DB_NAME)
@@ -102,15 +105,15 @@ def parse_jsonl_and_fill_database():
 
     # 2. Zeilenweise Verarbeitung (Streaming-Ansatz)
     cards_processed: int = 0
-    with open(JSONL_FILE, "r", encoding="utf-8") as f:
+    with open(MTG_DATA, "r", encoding="utf-8") as f:
         for line in f:
-            if cards_processed < 152800 :
+            if cards_processed < 534820 :
                 cards_processed += 1
                 continue
-            card = get_card_from_line(line)
+            card = _get_card_from_line(line)
             if card is not None:
                 try:
-                    inserted: bool = insert_mtgcard_in_db(cursor, card)
+                    inserted: bool = _insert_mtg_card_in_db(cursor, card)
                     if inserted:
                         cards_processed += 1
                         # Alle 10 Karten wegschreiben (Crash-Safety)
@@ -131,7 +134,7 @@ def parse_jsonl_and_fill_database():
     conn.close()
     logger.info(f"🎉 Fertig! Insgesamt {cards_processed} Karten in '{DB_NAME}' eingetragen.")
 
-def get_card_from_line(line: str) -> Union[dict, None]:
+def _get_card_from_line(line: str) -> Union[dict, None]:
     line = line.strip()
     if not line:
         return None
@@ -141,100 +144,77 @@ def get_card_from_line(line: str) -> Union[dict, None]:
     except json.JSONDecodeError:
         return None
 
-def insert_mtgcard_in_db(cursor, card: dict) -> bool:
+def _insert_mtg_card_in_db(cursor, card: dict) -> bool:
     # Performance Filter: Digitale Karten (MTG Arena) oder Karten ohne Hauptbild überspringen
     if card.get("digital", False) or "image_uris" not in card:
         return False
 
-    card_id = card.get("id")
-    card_name = card.get("name")
     image_url = card["image_uris"].get("normal")
-
     try:
         # Bild-Download für das Hashing (CDN-Server blockieren sehr selten)
-        img = get_image(image_url)
+        img = _get_image(image_url)
         if img is None:
-            logger.error(f"Kein Image für {card_name} gefunden.")
+            logger.error(f"Kein Image für {card.get("name")} gefunden.")
             return False
         p_hash = str(imagehash.phash(img))
 
         # Preise parsen und sicher zu Floats konvertieren
-        prices_dict = card.get("prices", {})
+        prices_dict = card.get("abilities", {})
         usd = float(prices_dict.get("usd")) if prices_dict.get("usd") else None
         eur = float(prices_dict.get("eur")) if prices_dict.get("eur") else None
 
         # SQL Einfügeoperation (Upsert-Logik)
-        insert_into_db(cursor, card_id, "mtg", card_name, card.get("set", "unk"), card.get("collector_number"),
-            p_hash, card.get("rarity"), card.get("mana_cost", ""), card.get("cmc", 0.0),
-            card.get("type_line", ""), card.get("oracle_text", ""),
+        _insert_into_db(cursor, card.get("id"), MTG_IDENTIFIER, card.get("name"), card.get("set", "unk"), card.get("collector_number"),
+                        p_hash, card.get("rarity"), card.get("mana_cost", ""), card.get("cmc", 0.0),
+                        card.get("type_line", ""), card.get("oracle_text", ""),
             "".join(card.get("colors", [])), "".join(card.get("color_identity", [])), usd, eur)
         return True
     except Exception as e:
-        logger.error(f"Fehler hinzufügen der Magic-Karte {card_name} in die DB: {e}")
+        logger.error(f"Fehler hinzufügen der Magic-Karte {card.get("name")} in die DB: {e}")
 
-def get_pokemon_set(set_id: str) -> Union[dict, None]:
-    api_url = "https://pokemontcg.io"
-    query_params = {"q": f"set.id:{set_id}"}
-    try:
-        response = requests.get(api_url, headers=HEADERS, params=query_params)
-        if response.status_code != 200:
-            return None
-        logger.info(f"Erfolgreich  das Set {set_id} heruntergeladen.")
-        return response.json()
-    except Exception as e:
-        logger.error(f"Fehler download des Sets {set_id}: {e}")
+def parse_pokemon_jsonl_and_fill_database():
+    """
+    Reads the uncompressed plain-text .jsonl file line by line,
+    extracts card data, computes pHashes, and populates the SQLite table.
+    """
 
-
-def download_all_pokemon_sets():
-    """Queries the Pokémon set index directory and coordinates mass collection loops."""
-    logger.info("🌐 Fetching complete Pokémon Set Directory from pokemontcg.io...")
-    response = requests.get("https://pokemontcg.io", headers=HEADERS)
-    if response.status_code != 200:
-        logger.error("Failed to retrieve Pokémon master set list.")
+    # 1. Durch das Submodule-Verzeichnis wandern und alle JSON-Dateien finden
+    if not os.path.exists(POKEMON_DATA):
+        print(f"Fehler: Der Pfad '{POKEMON_DATA}' wurde nicht gefunden. Bitte überprüfe deinen Submodule-Pfad.")
         return
-    sets_list = response.json().get("data", [])
-    logger.info(f"📋 Found {len(sets_list)} total Pokémon sets. Commencing loop iterations...")
-    for count, set_obj in enumerate(sets_list, start=1):
-        set_id = set_obj.get("id")
-        set_name = set_obj.get("name")
-        logger.info(f"🚀 Processing Pokémon Set [{count}/{len(sets_list)}]: '{set_name.upper()}' ({set_id})")
-        try:
-            total_hashed = fetch_and_hash_pokemon_set(set_id)
-            logger.info(f"✅ Completed Pokémon Set '{set_id}': Indexed {total_hashed} cards.")
-            time.sleep(0.5)
-        except KeyboardInterrupt:
-            logger.warning("🚨 [POKEMON] Master loop paused by user command. Progress saved.")
-            break
 
-
-def fetch_and_hash_pokemon_set(set_id: str) -> int:
-    """Idempotently hashes a Pokémon TCG set and maps items symmetrically into the shared table."""
+    # 2. Datenbank-Tabelle vorbereiten (falls noch nicht geschehen)
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
-    cards_processed = 0
-    # Get set data from pokemontcg.io
-    data = get_pokemon_set(set_id)
-    if data is None:
-        return 0
-    for card in data.get("data", []):
-        cards_processed: int = 0
-        try:
-            inserted = insert_pokemoncard_in_db(cursor, card)
-            if inserted:
-                time.sleep(0.12)
-                cards_processed += 1
-            if cards_processed % 10 == 0:
-                logger.info(
-                    f"   ↳ [JSONL Stream] {cards_processed} Karten in DB gesichert. Letzte: {card.get("name")}")
-                conn.commit()
-        except Exception as e:
-            logger.error(f"Error processing Pokémon card '{card.get("name")}': {e}")
 
+    print("Lese JSON-Daten aus dem Submodule... Bitte warten.")
+    for root, dirs, files in os.walk(POKEMON_DATA):
+        for file in files:
+            if file.endswith(".json"):
+                file_path = os.path.join(root, file)
+                set_id = file.replace(".json", "")
+                with open(file_path, "r", encoding="utf-8") as f:
+                    try:
+                        card_data_list = json.load(f)
+                        # Add extracted set card list to db
+                        for card in card_data_list:
+                            inserted: bool = _insert_pokemon_card_in_db(cursor, card, set_id)
+                            if not inserted:
+                                logger.error(f"Fehler bei einfügen der Karte {card.get("name")} in die DB. Karte übersprungen.")
+                    except KeyboardInterrupt:
+                        logger.warning(
+                            "🚨 Prozess manuell abgebrochen. Bis hierher gespeicherte Daten sind sicher in der DB.")
+                        break
+                    except Exception as e:
+                        logger.error(f"Fehler bei Set-JSON {file_path}: {e}")
+                    logger.info(
+                        f"   ↳ [JSONL Stream] {set_id} Set in DB gesichert.")
+                    conn.commit()
+    conn.commit()
     conn.close()
+    logger.info(f"🎉 Fertig! Alle Sets in '{DB_NAME}' eingetragen.")
 
-    return cards_processed
-
-def insert_pokemoncard_in_db(cursor, card: dict) -> bool:
+def _insert_pokemon_card_in_db(cursor, card: dict, set_id: str) -> bool:
     card_id = card.get("id")
     card_name = card.get("name")
     coll_num = card.get("number")
@@ -260,35 +240,27 @@ def insert_pokemoncard_in_db(cursor, card: dict) -> bool:
     colors = "".join(types_list).upper() if types_list else "COLORLESS"
     color_identity = colors
 
-    # Extract price parameters if available via the TCGPlayer data subnode
-    tcgplayer_prices = card.get("tcgplayer", {}).get("prices", {})
-    usd_val = None
-    if tcgplayer_prices:
-        first_market = list(tcgplayer_prices.values())[0]
-        usd_val = first_market.get("market") or first_market.get("mid")
+    # Extract price will be fill when a concrete crad is scanned
 
-    usd = float(usd_val) if usd_val else None
-    eur = None  # The Pokemon API does not serve localized EUR data blocks directly
+    usd = None
+    eur = None
 
     image_url = card.get("images", {}).get("large")
     if not image_url:
         return False
     try:
-        img = get_image(image_url)
-        if img is None:
-            logger.error(f"Image missing from '{card_name}'")
-        p_hash = str(imagehash.phash(img))
-        insert_into_db(cursor, card_id, card_name, coll_num, p_hash, rarity, p_hash, mana_cost, cmc, type_line,
-                       oracle_text, colors, color_identity, usd, eur)
+        p_hash = _get_phash(image_url)
+        _insert_into_db(cursor, card_id, POKEMON_IDENTIFIER, card_name, set_id, coll_num, p_hash, rarity, mana_cost, cmc, type_line,
+                        oracle_text, colors, color_identity, usd, eur)
         return True
     except Exception as e:
         logger.error(f"Fehler beim einfügen der Pokemon Karte {card_name} in die Datenbank: {e}")
         return False
 
-def get_image(image_url:str)-> Image:
+def _get_image(image_url:str) -> Image:
     # Bild-Download für das Hashing (CDN-Server blockieren sehr selten)
     try:
-        img_response = requests.get(image_url, headers=HEADERS)
+        img_response = requests.get(image_url, headers=SCRYFALL_HEADERS)
         if img_response.status_code == 200:
             img = Image.open(BytesIO(img_response.content))
             return img
@@ -298,9 +270,21 @@ def get_image(image_url:str)-> Image:
     except Exception as e:
             logger.error(f"Fehler bei Image Download {image_url}: {e}")
 
+def _get_phash(image_url:str)-> bool | str:
+    try:
+        # Bild-Download für das Hashing (CDN-Server blockieren sehr selten)
+        image = _get_image(image_url)
+        if image is None:
+            logger.error(f"Kein Image für {image_url} gefunden.")
+            return False
+        else:
+            p_hash = str(imagehash.phash(image))
+            return p_hash
+    except Exception as e:
+        logger.error(f"Fehler bei pHash generation for: {image_url}: {e}")
+        return False
 
-
-def insert_into_db(cursor, card_id: str, tcg: str, name: str, set_code: str, collector_num: int, phash: str, rarity: str, mana_cost: str, cmc: float, type_line: str, oracle_text: str, colors: str, color_identity: str, usd: float, eur: float):
+def _insert_into_db(cursor, card_id: str, tcg: str, name: str, set_code: str, collector_num: int, phash: str, rarity: str, mana_cost: str, cmc: float, type_line: str, oracle_text: str, colors: str, color_identity: str, usd: float, eur: float):
     cursor.execute("""
                     INSERT OR REPLACE INTO card_hashes (
                     id, tcg, name, set_code, collector_num, phash, rarity,
@@ -312,9 +296,9 @@ def insert_into_db(cursor, card_id: str, tcg: str, name: str, set_code: str, col
 
 def _debug_print_card_json(print_n: int = 1):
     printed:int = 0
-    with open(JSONL_FILE, "r", encoding="utf-8") as f:
+    with open(MTG_DATA, "r", encoding="utf-8") as f:
         for line in f:
-            card = get_card_from_line(line)
+            card = _get_card_from_line(line)
             print(card)
             if printed == print_n:
                 return
@@ -322,7 +306,8 @@ def _debug_print_card_json(print_n: int = 1):
 
 
 if __name__ == "__main__":
-    # init_database() # will rest the db. All data will be lost!
+    # Resets and Inits the db. All data will be lost!
+    # init_database()
 
     # Run the full sequence automated. Interrupt via Ctrl+C anytime!
 
@@ -330,9 +315,9 @@ if __name__ == "__main__":
     # extract_gzip_archive(COMPRESSED_FILE)
 
     # Fill database with extracted data set
-    parse_jsonl_and_fill_database()
+    # parse_jsonl_and_fill_database()
 
     # Fill database with Pokemon TCG data from pokemontcg.io
-    # download_all_pokemon_sets()
+     parse_pokemon_jsonl_and_fill_database()
 
     # _debug_print_card_json()

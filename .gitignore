@@ -23,3 +23,6 @@ Thumbs.db
 # Zukünftige Konfigurationsdaten (Falls ihr APIs nutzt)
 .env
 local_settings.py
+
+card_dbs/all-cards-20261006211848.jsonl.gz
+crad_dbs/scryfall_bulk.jsonl
