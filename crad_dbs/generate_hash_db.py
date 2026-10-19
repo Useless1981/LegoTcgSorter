@@ -294,17 +294,6 @@ def _insert_into_db(cursor, card_id: str, tcg: str, name: str, set_code: str, co
         mana_cost, cmc, type_line, oracle_text, colors, color_identity, usd, eur
     ))
 
-def _debug_print_card_json(print_n: int = 1):
-    printed:int = 0
-    with open(MTG_DATA, "r", encoding="utf-8") as f:
-        for line in f:
-            card = _get_card_from_line(line)
-            print(card)
-            if printed == print_n:
-                return
-
-
-
 if __name__ == "__main__":
     # Resets and Inits the db. All data will be lost!
     # init_database()
